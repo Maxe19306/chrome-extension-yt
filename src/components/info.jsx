@@ -32,6 +32,7 @@ const ChannelBio = ({ channelBio, maxLength }) => {
 
 class Info extends Component {
   state = {
+    noYoutubeVideo: false,
     isLoading: true,
     channelTitle: '',
     channelImage: '',
@@ -41,40 +42,50 @@ class Info extends Component {
     subscribersText: '',
   };
 
-  componentDidMount() {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      const currentUrl = tabs[0].url;
-      console.log('erste URL:', currentUrl);
+componentDidMount() {
+  
+ chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const currentUrl = tabs[0].url;
+    this.handleUrlChange(currentUrl)    
+  });
+
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (changeInfo.url && tab.active && tab.url) {
+      const newUrl = changeInfo.url;
+      this.handleUrlChange(newUrl)
+    }
+  })
+}
+
+handleUrlChange(url) {
+  if (this.isYouTubeUrl(url)) {
+    const videoID = this.youtube_parser(url);
+    this.loadVideo(videoID);
+  } else {
+    this.setState({
+      noYoutubeVideo: true
     });
-
-    this.addURLChangeListeners();
   }
+}
 
-  componentWillUnmount() {
-    this.removeURLChangeListeners();
-    console.log('hallo');
+
+  youtube_parser(url){
+    var regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
+    var match = url.match(regExp);
+    return (match&&match[7].length==11)? match[7] : false;
   }
-
-  addURLChangeListeners() {
-    window.addEventListener('hashchange', this.handleURLChange);
-    window.addEventListener('popstate', this.handleURLChange);
+  
+  
+  isYouTubeUrl(url) {
+    // Überprüfe, ob die URL zu YouTube gehört
+    const youtubeDomain = 'www.youtube.com';
+    const urlObj = new URL(url);
+    return urlObj.hostname === youtubeDomain;
   }
-
-  removeURLChangeListeners() {
-    window.removeEventListener('hashchange', this.handleURLChange);
-    window.removeEventListener('popstate', this.handleURLChange);
-  }
-
-  handleURLChange = () => {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      const currentUrl = tabs[0].url;
-      console.log('zweite URL:', currentUrl);
-    });
-  };
-
 
 
   loadVideo = async (videoID) => {
+    
     const options = {
       method: 'GET',
       url: 'https://youtube138.p.rapidapi.com/video/details/',
@@ -82,19 +93,17 @@ class Info extends Component {
         id: videoID,
       },
       headers: {
-        'X-RapidAPI-Key': '25ffaed0e3msh993fc2e72b8d207p15c6f9jsna8933ec26b3a',
+        'X-RapidAPI-Key': '09ec3d1b95msh9c398ceb6f5d1b0p1ec3cfjsn0e2d038dd1e3',
         'X-RapidAPI-Host': 'youtube138.p.rapidapi.com'
       }
     };
 
     try {
       const response = await axios(options);
-      console.log('erstes Console log', response.data)
-     this.loadChannel(response.data.author.channelId)
-      
-    } catch (error) {
+      this.loadChannel(response.data.author.channelId)
+        } catch (error) {
       console.error(error);
-    }
+    } 
   };
   
   loadChannel = async (ChannelID) => {
@@ -105,14 +114,20 @@ class Info extends Component {
           id: ChannelID,
         },
         headers: {
-          'X-RapidAPI-Key': '25ffaed0e3msh993fc2e72b8d207p15c6f9jsna8933ec26b3a',
+          'X-RapidAPI-Key': '09ec3d1b95msh9c398ceb6f5d1b0p1ec3cfjsn0e2d038dd1e3',
           'X-RapidAPI-Host': 'youtube138.p.rapidapi.com'
         }
       };
   
       try {
         const response = await axios(options);
-        console.log('zweites Console log', response.data)
+        this.handleChannelResponse(response)
+        
+      } catch (error) {
+        console.error(error);
+      }}
+      
+ handleChannelResponse(response){
         this.setState({
           channelTitle: response.data.title,
           channelImage: response.data.avatar[1].url,
@@ -122,14 +137,16 @@ class Info extends Component {
           subscribersText: response.data.stats.subscribers,
           isLoading: false,
         })
-        
-      } catch (error) {
-        console.error(error);
-      }}
+      }
 
 
       render() {
-    const {isLoading, channelTitle, channelImage,channelBio,joinedDateText, videosText, subscribersText } = this.state;
+    const {noYoutubeVideo ,isLoading, channelTitle, channelImage,channelBio,joinedDateText, videosText, subscribersText } = this.state;
+    
+    
+    if(noYoutubeVideo){
+      return <p>Diese Erweiterung ist nur für Youtube</p> // wird angezeigt, wenn der Nutzer nicht auf Youtube ist.
+    }
     
     if (isLoading) {
       return <p className='loading'>Lade Informationen...</p>; // Anzeige, während die Informationen geladen werden
@@ -142,10 +159,10 @@ class Info extends Component {
         <h2>Kanalname: {channelTitle}</h2>
         <img src={channelImage} alt='' />
       </div>
-      <ChannelBio channelBio={channelBio} maxLength={200} /> {/* Begrenze auf 100 Zeichen */}
+      <ChannelBio channelBio={channelBio} maxLength={200} /> {}
       <p>{channelTitle} ist seit dem {joinedDateText} auf Youtube, hat seitdem {videosText} Videos
         hochgeladen und {subscribersText} Abos erreicht.</p>
-        <button> hallo</button>
+       
     </div>
     );
   }
